@@ -1,0 +1,3 @@
+#!/bin/sh
+# Only marks the shell prerequisite in the isolated installation fixture.
+test "$HOME" = /home/pilot-poc

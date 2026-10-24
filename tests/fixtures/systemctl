@@ -1,0 +1,32 @@
+#!/usr/bin/python3
+"""Isolated test boundary. Never used by the production setup command."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+home = Path.home()
+assert str(home) == "/home/pilot-poc"
+assert not Path("/run/user/1000/bus").exists()
+args = sys.argv[1:]
+if ("enable" in args or "start" in args) and "loongsuite-pilot.service" in args:
+    cfg = json.loads((home / ".loongsuite-pilot/config.json").read_text())
+    assert cfg["agents"]["codex"]["captureMessageContent"] is False
+    assert cfg["collectLog"] is False and cfg["collectTrace"] is False
+    assert cfg["http"]["enabled"] is False
+    assert cfg["autoUpdate"]["enabled"] is False
+    assert all(v.get("enabled") is False for k, v in cfg["agents"].items() if k != "codex")
+    (home / "privacy-before-start.ok").write_text("Passed before real collector process launch\n")
+    pidfile = home / ".loongsuite-pilot/loongsuite-pilot.pid"
+    running = False
+    try:
+        os.kill(int(pidfile.read_text()), 0)
+        running = True
+    except (OSError, ValueError):
+        pass
+    if not running:
+        subprocess.Popen([str(home / ".local/bin/loongsuite-pilot"), "run"],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+sys.exit(0)

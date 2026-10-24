@@ -1,0 +1,3 @@
+#!/bin/sh
+# Isolated service test: do not touch the host logind session.
+test "$HOME" = /home/pilot-poc
