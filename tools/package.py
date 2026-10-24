@@ -19,7 +19,7 @@ for name in runtime:
     dest = target / release / name
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source / name, dest)
-for name in ['LICENSE', 'README.md']:
+for name in ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES', 'README.md']:
     shutil.copy2(source / name, target / name)
 manifest = json.loads((source / 'manifest.json').read_text())
 manifest['entryPoints']['barWidget'] = str(release / 'BarWidget.qml')

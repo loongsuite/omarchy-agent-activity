@@ -90,3 +90,10 @@ Overview and Sessions retain bounded local reads (24 files / 16 MiB), reported
 usage rather than billing or account quota, and source-reported costs only.
 Unknown values are not invented. Esc / Backspace returns from a session, R reads
 again. Upgrade compatibility and a permanent daemon for setup are future work.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
+See [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) for
+retained attribution and the MIT terms applicable to Omarchy-derived portions.
+LoongSuite Pilot is installed separately and retains its own license.
