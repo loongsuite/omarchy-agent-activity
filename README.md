@@ -28,9 +28,7 @@ systemd user session. Currently supports Codex with LoongSuite Pilot 1.13.0.
 Open a terminal in Omarchy and run:
 
 ```sh
-git clone https://github.com/loongsuite/omarchy-agent-activity.git
-cd omarchy-agent-activity
-bash install.sh
+omarchy plugin add https://github.com/loongsuite/omarchy-agent-activity.git --enable
 ```
 
 1. Click the **chart icon** in the top bar.
@@ -40,6 +38,16 @@ bash install.sh
    until setup completes.
 4. Use Codex, then open **Overview** or **Sessions** and click **Refresh** to
    see the recorded activity.
+
+## Uninstall
+
+```sh
+omarchy plugin remove io.github.loongsuite.pilot
+```
+
+This removes the Agent Activity widget. Pilot and its local records are managed
+separately. See the [Pilot repository](https://github.com/alibaba/loongsuite-pilot)
+if you also want to uninstall Pilot.
 
 ## Your data
 
