@@ -21,6 +21,7 @@ for name in runtime:
     shutil.copy2(source / name, dest)
 for name in ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES', 'README.md']:
     shutil.copy2(source / name, target / name)
+shutil.copytree(source / 'docs/screenshots', target / 'docs/screenshots', dirs_exist_ok=True)
 manifest = json.loads((source / 'manifest.json').read_text())
 manifest['entryPoints']['barWidget'] = str(release / 'BarWidget.qml')
 (target / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')

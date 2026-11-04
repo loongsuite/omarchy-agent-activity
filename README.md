@@ -8,11 +8,17 @@ Powered by [LoongSuite Pilot](https://github.com/alibaba/loongsuite-pilot).
 Switch between **Today**, **7 days**, and **30 days** to explore token usage,
 cache reuse, daily trends, and the models you use.
 
+![Agent Activity overview on Omarchy](docs/screenshots/overview.png)
+
 ## Follow a session
 
 Browse your sessions, see their duration, turns, and token usage, then open one
 to follow the conversation and inspect tool results. Costs appear when reported
 by the source. Press **Backspace** or **Esc** to return to the session list.
+
+![Session timeline and conversation details on Omarchy](docs/screenshots/session-detail.png)
+
+*Screenshots show a demo dataset with conversation content enabled.*
 
 ## Install
 
