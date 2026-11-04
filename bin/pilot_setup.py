@@ -14,6 +14,7 @@ import platform
 import re
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import time
 import urllib.request
@@ -36,6 +37,26 @@ class SetupError(Exception):
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def packaged_agent_ids(package):
+    ids = set()
+    with tarfile.open(package, "r:gz") as archive:
+        for member in archive:
+            path = Path(member.name)
+            if path.parent != Path("loongsuite-pilot/agents.d") or not re.fullmatch(r"[a-z0-9][a-z0-9-]*\.json", path.name):
+                continue
+            if not member.isfile() or member.size > 1024 * 1024:
+                raise SetupError("Invalid agent definition in the Pilot package.")
+            with archive.extractfile(member) as file:
+                definition = json.load(file)
+            agent_id = definition.get("id") if isinstance(definition, dict) else None
+            if agent_id != path.stem or agent_id in ids:
+                raise SetupError("Invalid or duplicate agent ID in the Pilot package.")
+            ids.add(agent_id)
+    if not ids:
+        raise SetupError("No agent definitions found in the Pilot package.")
+    return sorted(ids)
 
 
 def read_object(path):
@@ -157,6 +178,8 @@ class Setup:
         policies = [v.get("captureMessageContent") for v in agents.values()
                     if isinstance(v, dict) and v.get("enabled") is not False]
         capture = "off" if policies and all(v is False for v in policies) else "on or unspecified"
+        if agents and all(isinstance(v, dict) and v.get("enabled") is False for v in agents.values()):
+            capture = "off (no agents enabled)"
         jsonl = cfg.get("jsonl") or {}
         if not isinstance(jsonl, dict):
             error, jsonl = "Unsupported JSONL configuration.", {}
@@ -191,6 +214,7 @@ class Setup:
             "cli": cli, "dataDir": str(self.data), "outputDir": output,
             "service": self.runtime_status() if cli else "not installed",
             "capture": capture if cfg else "unknown", "remote": ", ".join(remote) or "none configured in this file",
+            "enabledAgents": sorted(k for k, v in agents.items() if isinstance(v, dict) and v.get("enabled") is True),
             "configHash": fingerprint(self.config), "panelHash": fingerprint(self.panel_config),
             "source": "Existing configuration inspected; environment overrides are not audited.",
         }
@@ -203,14 +227,14 @@ class Setup:
         elif observed["state"] == "missing":
             message = self.fresh_prerequisites()
             if not message:
-                action, message = "install", "Install the official Pilot release, configure Codex usage-only collection, and start its user services."
+                action, message = "install", "Install Pilot and configure local usage collection for supported agents detected on this machine."
         value = {"action": action, "message": message, "observed": observed,
-                 "version": VERSION, "agents": ["codex"], "contentCapture": False,
+                 "version": VERSION, "contentCapture": False,
                  "assets": ASSETS if action == "install" else {},
                  "effects": ["Download Pilot and any required Node runtime/dependencies",
                              "Write usage-only configuration BEFORE starting collection",
-                             "Deploy Codex integration and start Pilot user services",
-                             "Official installer may add its CLI to your shell PATH",
+                             "Detect supported agents and configure their integrations",
+                             "Start Pilot user services. The installer may update shell startup files for its CLI and agent integrations",
                              "Local JSONL only; auto-update disabled for this PoC"] if action == "install"
                             else ["Write the panel data path only; preserve existing presentation preferences"]}
         # Dynamic process status does not change what has been approved.
@@ -243,11 +267,14 @@ class Setup:
                 os.unlink(temp)
         return path
 
-    def seed_config(self):
+    def seed_config(self, agent_ids):
+        # The installer enables detected agents. If discovery returns nothing,
+        # all agents stay disabled, with content capture off for every definition.
+        agents = {agent: {"enabled": False, "captureMessageContent": False} for agent in agent_ids}
         return {"enabled": True, "dataDir": str(self.data), "collectLog": False, "collectTrace": False,
                 "jsonl": {"enabled": True, "outputDir": str(self.data / "logs/output")},
                 "http": {"enabled": False}, "autoUpdate": {"enabled": False},
-                "enableStatusBarApp": False, "agents": {"codex": {"enabled": True, "captureMessageContent": False}},
+                "enableStatusBarApp": False, "agents": agents,
                 "mask": {"mode": "all"}}
 
     def run_installer(self, installer, package, log):
@@ -255,8 +282,9 @@ class Setup:
         allowed = ("HOME", "USER", "LOGNAME", "PATH", "LANG", "LC_ALL", "TERM", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
         env = {k: v for k, v in self.env.items() if k in allowed}
         env.update(HOME=str(self.home), LOONGSUITE_PILOT_AUTO_UPDATE_ENABLED="false")
+        # With stdin closed and no selection flag, Pilot selects detected agents.
         command = ["bash", str(installer), "install", "--version", VERSION,
-                   "--package-url", package.as_uri(), "--agents", "codex",
+                   "--package-url", package.as_uri(),
                    "--collect-log", "false", "--collect-trace", "false", "--lang", "en",
                    "--enable-status-bar-app", "false", "--multimodal-mode", "none"]
         with log.open("w") as out:
@@ -295,25 +323,35 @@ class Setup:
             # Recheck after network I/O; never clobber an installation created meanwhile.
             if self.plan()["token"] != token:
                 raise SetupError("Environment changed during download. Review again.")
+            agent_ids = packaged_agent_ids(package)
             self.data.mkdir(mode=0o700, exist_ok=True)
             with self.config.open("x") as f:
                 os.chmod(self.config, 0o600)
-                json.dump(self.seed_config(), f, indent=2)
+                json.dump(self.seed_config(agent_ids), f, indent=2)
             atomic_json(self.cache / "attempt.json", {"stage": "starting", "time": time.time(), "version": VERSION})
             log = self.cache / "install.log"
             try:
                 self.run_installer(installer, package, log)
                 now = self.probe()
-                if now["state"] != "existing" or now["capture"] != "off":
+                if now["state"] != "existing":
                     raise SetupError("Post-install checks failed; inspect configuration before using collection.")
                 cfg = read_object(self.config)
+                agents = cfg.get("agents")
+                if not isinstance(agents, dict) or set(agents) != set(agent_ids) or any(
+                    not isinstance(agent, dict) or agent.get("captureMessageContent") is not False
+                    or not isinstance(agent.get("enabled"), bool) for agent in agents.values()
+                ):
+                    raise SetupError("Post-install agent privacy check failed.")
                 if cfg.get("collectLog") is not False or cfg.get("collectTrace") is not False or cfg.get("http", {}).get("enabled") is not False:
                     raise SetupError("Post-install local-output policy check failed.")
                 if now["service"] != "running":
                     raise SetupError("Pilot was installed but its running collector was not verified. Inspect the log before retrying.")
                 self.connect(now)
                 atomic_json(self.cache / "attempt.json", {"stage": "complete", "time": time.time(), "version": VERSION})
-                return {"ok": True, "message": "Pilot installed. Codex content capture is off; local output is ready.", "probe": now}
+                enabled = ", ".join(now["enabledAgents"])
+                message = (f"Pilot installed for {enabled}. Conversation content is off."
+                           if enabled else "Pilot installed. No supported agents were detected, so collection is disabled.")
+                return {"ok": True, "message": message, "probe": now}
             except Exception:
                 atomic_json(self.cache / "attempt.json", {"stage": "failed", "time": time.time(), "log": str(log)})
                 raise

@@ -12,11 +12,11 @@ assert not Path("/run/user/1000/bus").exists()
 args = sys.argv[1:]
 if ("enable" in args or "start" in args) and "loongsuite-pilot.service" in args:
     cfg = json.loads((home / ".loongsuite-pilot/config.json").read_text())
-    assert cfg["agents"]["codex"]["captureMessageContent"] is False
+    assert all(v.get("captureMessageContent") is False for v in cfg["agents"].values())
     assert cfg["collectLog"] is False and cfg["collectTrace"] is False
     assert cfg["http"]["enabled"] is False
     assert cfg["autoUpdate"]["enabled"] is False
-    assert all(v.get("enabled") is False for k, v in cfg["agents"].items() if k != "codex")
+    assert {k for k, v in cfg["agents"].items() if v.get("enabled") is True} == {"claude-code", "codex"}
     (home / "privacy-before-start.ok").write_text("Passed before real collector process launch\n")
     pidfile = home / ".loongsuite-pilot/loongsuite-pilot.pid"
     running = False

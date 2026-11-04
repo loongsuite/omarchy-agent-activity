@@ -23,7 +23,8 @@ by the source. Press **Backspace** or **Esc** to return to the session list.
 ## Install
 
 Requires the Omarchy Quattro desktop, Python 3, Git, `curl`, `tar`, and a running
-systemd user session. Currently supports Codex with LoongSuite Pilot 1.13.0.
+systemd user session. The panel reads LoongSuite Pilot 1.13.0 records for
+supported agents such as Claude Code and Codex.
 
 Open a terminal in Omarchy and run:
 
@@ -34,10 +35,11 @@ omarchy plugin add https://github.com/loongsuite/omarchy-agent-activity.git --en
 1. Click the **chart icon** in the top bar.
 2. Open **Setup** and select **Review setup**.
 3. Choose **Install & set up Pilot**, or **Connect existing Pilot** if a
-   compatible installation is already available. Keep the desktop running
-   until setup completes.
-4. Use Codex, then open **Overview** or **Sessions** and click **Refresh** to
-   see the recorded activity.
+   compatible installation is already available. A fresh install configures
+   the supported agents Pilot detects. Keep the desktop running until setup
+   completes.
+4. Use a configured agent, then open **Overview** or **Sessions** and click
+   **Refresh** to see the recorded activity.
 
 ## Uninstall
 

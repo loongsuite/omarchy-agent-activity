@@ -15,6 +15,7 @@ Column {
   signal inspectRequested()
   signal applyRequested(string token)
   readonly property var observed: plan.observed || ({})
+  readonly property var enabledAgents: observed.enabledAgents || []
   readonly property color secondary: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.76)
   spacing: 14 * unit
   onPlanChanged: reviewed = false
@@ -38,10 +39,11 @@ Column {
       Repeater {
         model: [
           "Pilot: " + (root.observed.version || "Not detected") + " · " + (root.observed.service || "Checking"),
+          root.enabledAgents.length ? "Agents enabled in Pilot: " + root.enabledAgents.join(", ") : "",
           "Content capture: " + (root.observed.capture || "Unknown"),
           "Backend configuration: " + (root.observed.remote || "Checking"),
           "Local output: " + (root.observed.outputDir || "Checking")
-        ]
+        ].filter(function(line) { return line !== "" })
         Text { required property string modelData; width: facts.width; text: modelData; color: root.foreground; font.family: root.family; font.pixelSize: 12 * root.unit; wrapMode: Text.Wrap; textFormat: Text.PlainText }
       }
     }
@@ -54,7 +56,7 @@ Column {
   }
   Text {
     width: parent.width
-    text: root.plan.action === "install" ? "New installation · Pilot " + root.plan.version + "\nCodex only · conversation content off · local output only\nDownloads require internet. No Pilot source is bundled with this plugin."
+    text: root.plan.action === "install" ? "New installation · Pilot " + root.plan.version + "\nSupported agents are detected during installation. Conversation content stays off and output stays local.\nDownloads require internet."
       : "This panel does not change your collector’s capture or export settings. Hidden content in the panel does not mean content was not collected."
     color: root.secondary; font.family: root.family; font.pixelSize: 12 * root.unit; wrapMode: Text.Wrap
   }
@@ -96,7 +98,7 @@ Column {
   }
   Text {
     width: parent.width
-    text: "PoC · supports Pilot 1.13.0 + Codex. Upgrades and repairs remain manual. Existing configuration is preserved."
+    text: "Supports Pilot 1.13.0. Upgrades and repairs remain manual. Existing configuration is preserved."
     color: root.secondary; font.family: root.family; font.pixelSize: 11 * root.unit; wrapMode: Text.Wrap
   }
 }

@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -14,6 +15,8 @@ spec.loader.exec_module(m)
 
 
 class SetupTests(unittest.TestCase):
+    agent_ids = ("claude-code", "codex", "opencode")
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.home = Path(self.tmp.name)
@@ -32,7 +35,7 @@ class SetupTests(unittest.TestCase):
         cli.parent.mkdir(parents=True)
         cli.write_text("#!/bin/sh\nexit 99\n")
         cli.chmod(0o700)
-        cfg = self.s.seed_config()
+        cfg = self.s.seed_config(self.agent_ids)
         cfg.update(extra)
         self.s.config.write_text(json.dumps(cfg))
 
@@ -91,7 +94,8 @@ class SetupTests(unittest.TestCase):
     def fake_install(self, installer, package, log):
         # This is the boundary immediately BEFORE upstream starts anything.
         cfg = m.read_object(self.s.config)
-        self.assertFalse(cfg["agents"]["codex"]["captureMessageContent"])
+        self.assertEqual(cfg["agents"], {agent: {"enabled": False, "captureMessageContent": False}
+                                        for agent in self.agent_ids})
         self.assertFalse(cfg["collectLog"])
         self.assertFalse(cfg["collectTrace"])
         self.assertFalse(cfg["http"]["enabled"])
@@ -104,14 +108,28 @@ class SetupTests(unittest.TestCase):
         c.parent.mkdir(parents=True)
         c.write_text("#!/bin/sh\nexit 0\n")
         c.chmod(0o700)
+        for agent in ("claude-code", "codex"):
+            cfg["agents"][agent]["enabled"] = True
+        m.atomic_json(self.s.config, cfg)
+
+    def fixture_package(self):
+        path = self.home / "fixture.tar.gz"
+        with tarfile.open(path, "w:gz") as archive:
+            for agent in self.agent_ids:
+                definition = json.dumps({"id": agent}).encode()
+                member = tarfile.TarInfo(f"loongsuite-pilot/agents.d/{agent}.json")
+                member.size = len(definition)
+                archive.addfile(member, io.BytesIO(definition))
+        return path
 
     def test_fresh_install_privacy_precedes_first_start(self):
         plan = self.s.plan()
-        with patch.object(self.s, "download", return_value=self.home / "asset"), \
+        with patch.object(self.s, "download", return_value=self.fixture_package()), \
              patch.object(self.s, "run_installer", side_effect=self.fake_install), \
              patch.object(self.s, "runtime_status", return_value="running"):
             result = self.s.apply(plan["token"])
         self.assertTrue(result["ok"])
+        self.assertEqual(result["probe"]["enabledAgents"], ["claude-code", "codex"])
         self.assertFalse(m.read_object(self.s.panel_config)["allowContent"])
         self.assertEqual(self.s.plan()["action"], "connect")
 
@@ -135,7 +153,7 @@ class SetupTests(unittest.TestCase):
 
     def test_installer_failure_retains_config_and_reports_partial_state(self):
         plan = self.s.plan()
-        with patch.object(self.s, "download", return_value=self.home / "asset"), \
+        with patch.object(self.s, "download", return_value=self.fixture_package()), \
              patch.object(self.s, "run_installer", side_effect=m.SetupError("upstream failed")):
             with self.assertRaises(m.SetupError):
                 self.s.apply(plan["token"])
