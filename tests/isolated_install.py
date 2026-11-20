@@ -18,12 +18,6 @@ spec = importlib.util.spec_from_file_location("setup", "/tmp/work/bin/pilot_setu
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 s = m.Setup()
-original_seed = s.seed_config
-def seed(agent_ids):
-    cfg = original_seed(agent_ids)
-    cfg["dashboard"] = {"port": 18877}
-    return cfg
-s.seed_config = seed
 for agent_dir in (".claude", ".codex"):
     (Path.home() / agent_dir).mkdir(exist_ok=True)
 plan = s.plan()

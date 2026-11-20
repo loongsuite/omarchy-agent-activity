@@ -19,15 +19,15 @@ import tempfile
 import time
 import urllib.request
 
-VERSION = "1.13.0"
-COMMIT = "2b516fb8423924c7541b89d9b8e30f61e0dbaff8"
+VERSION = "1.19.1"
+RELEASE_URL = f"https://github.com/alibaba/loongsuite-pilot/releases/download/v{VERSION}"
 ASSETS = {
     "installer.sh": (
-        f"https://raw.githubusercontent.com/alibaba/loongsuite-pilot/{COMMIT}/deploy/installer-opensource.sh",
-        "01fcc760b6ee4fa876e9b5755b1f934536fd9fb93a99f17d7fb9bda9aebd4295"),
+        f"{RELEASE_URL}/installer.sh",
+        "b04d51b2e9d1a00de60646fa531206aa28e47833594202fe87cb0ab94b805138"),
     "pilot.tar.gz": (
-        f"https://loongcollector-community-edition.oss-cn-shanghai.aliyuncs.com/loongsuite-pilot/{VERSION}/loongsuite-pilot.tar.gz",
-        "16b6d06b915c73b0b5ac29668a4c219b9d6589240cc66b4e134e5fa3b153440f"),
+        f"{RELEASE_URL}/loongsuite-pilot.tar.gz",
+        "7a37adf37b7139e412b3411e2cc0d9242753ce19aa411a76ca6a3403fdc2c0fb"),
 }
 
 
@@ -146,8 +146,6 @@ class Setup:
             return "Installation requires Linux with a running Omarchy user session."
         if os.getuid() == 0:
             return "Run setup as the desktop user, not root."
-        if self.data != self.home / ".loongsuite-pilot" or self.cache_root != self.data:
-            return "Custom Pilot paths are read-only in this PoC."
         # The pinned upstream installer interpolates HOME into shell/JS snippets.
         if not re.fullmatch(r"/[A-Za-z0-9_./-]+", str(self.home)):
             return "This PoC installer does not support special characters in the home path."
@@ -166,9 +164,16 @@ class Setup:
     def probe(self):
         cli, version = self.cli(), self.installed_version()
         cfg, error = {}, ""
-        if self.config.exists():
+        custom_paths = (self.data != self.home / ".loongsuite-pilot" or self.cache_root != self.data
+                        or bool(self.env.get("AGENT_DATA_COLLECTION_CONFIG", "").strip()))
+        if custom_paths:
+            error = "Setup requires the default Pilot paths. Manage this custom installation in Pilot."
+        elif self.config.exists():
             try:
                 cfg = read_object(self.config)
+                data_dir = cfg.get("dataDir")
+                if data_dir and data_dir not in (str(self.data), "~/.loongsuite-pilot"):
+                    error = "Pilot uses a custom data directory. Manage this installation in Pilot."
             except (OSError, ValueError, SetupError):
                 error = "Pilot configuration cannot be read. No files will be overwritten."
         else:
@@ -196,14 +201,13 @@ class Setup:
                 disabled = disabled or (k == "sls" and cfg.get("collectLog") is False)
                 disabled = disabled or (k in ("otlp", "cms") and cfg.get("collectTrace") is False)
                 remote.append(k + (": disabled" if disabled else ": configured (review in Pilot)"))
-        evidence = self.data.exists() and (self.data.is_symlink() or any(self.data.iterdir()))
         if error:
             state = "needs-review"
         elif cli and version == VERSION:
             state = "existing"
         elif cli or version:
             state, error = "incompatible", f"PoC verified version: {VERSION}. Existing version: {version or 'unknown'}."
-        elif evidence or self.cache_root.exists() and any(self.cache_root.iterdir()):
+        elif self.data.is_symlink() or self.data.exists() and any(self.data.iterdir()):
             state, error = "needs-review", "An incomplete or custom Pilot installation exists. Repair it manually; setup will not overwrite it."
         else:
             state = "missing"
@@ -215,7 +219,7 @@ class Setup:
             "service": self.runtime_status() if cli else "not installed",
             "capture": capture if cfg else "unknown", "remote": ", ".join(remote) or "none configured in this file",
             "enabledAgents": sorted(k for k, v in agents.items() if isinstance(v, dict) and v.get("enabled") is True),
-            "configHash": fingerprint(self.config), "panelHash": fingerprint(self.panel_config),
+            "configHash": "uninspected" if custom_paths else fingerprint(self.config), "panelHash": fingerprint(self.panel_config),
             "source": "Existing configuration inspected; environment overrides are not audited.",
         }
 
@@ -274,24 +278,39 @@ class Setup:
         return {"enabled": True, "dataDir": str(self.data), "collectLog": False, "collectTrace": False,
                 "jsonl": {"enabled": True, "outputDir": str(self.data / "logs/output")},
                 "http": {"enabled": False}, "autoUpdate": {"enabled": False},
-                "enableStatusBarApp": False, "agents": agents,
+                "enableStatusBarApp": False, "dashboard": {"enabled": False}, "agents": agents,
                 "mask": {"mode": "all"}}
 
-    def run_installer(self, installer, package, log):
+    def installer_environment(self):
         # Do not let parent environment inject backend credentials or Node preload hooks.
         allowed = ("HOME", "USER", "LOGNAME", "PATH", "LANG", "LC_ALL", "TERM", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
         env = {k: v for k, v in self.env.items() if k in allowed}
         env.update(HOME=str(self.home), LOONGSUITE_PILOT_AUTO_UPDATE_ENABLED="false")
+        return env
+
+    def run_installer(self, installer, package, log):
         # With stdin closed and no selection flag, Pilot selects detected agents.
         command = ["bash", str(installer), "install", "--version", VERSION,
                    "--package-url", package.as_uri(),
                    "--collect-log", "false", "--collect-trace", "false", "--lang", "en",
-                   "--enable-status-bar-app", "false", "--multimodal-mode", "none"]
+                   "--enable-status-bar-app", "false", "--multimodal-mode", "none", "--no-start"]
         with log.open("w") as out:
             os.chmod(log, 0o600)
-            result = subprocess.run(command, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT)
+            result = subprocess.run(command, env=self.installer_environment(), stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT)
         if result.returncode:
             raise SetupError(f"Official installer exited {result.returncode}. Check the local installation log; partial installation is preserved for inspection.")
+
+    def start_collector(self, cli, log):
+        with log.open("a") as out:
+            result = subprocess.run([cli, "start"], env=self.installer_environment(),
+                                    stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT)
+        if result.returncode:
+            raise SetupError("Pilot could not start. Check the local installation log.")
+        deadline = time.monotonic() + 15
+        while self.runtime_status() != "running":
+            if time.monotonic() >= deadline:
+                raise SetupError("Pilot was installed but its running collector was not verified. Check the local installation log.")
+            time.sleep(0.25)
 
     def connect(self, observed):
         cfg = read_object(self.panel_config) if self.panel_config.exists() else {"allowContent": False}
@@ -342,16 +361,17 @@ class Setup:
                     or not isinstance(agent.get("enabled"), bool) for agent in agents.values()
                 ):
                     raise SetupError("Post-install agent privacy check failed.")
+                if cfg.get("dashboard", {}).get("enabled") is not False:
+                    raise SetupError("Post-install Dashboard privacy check failed.")
                 if cfg.get("collectLog") is not False or cfg.get("collectTrace") is not False or cfg.get("http", {}).get("enabled") is not False:
                     raise SetupError("Post-install local-output policy check failed.")
-                if now["service"] != "running":
-                    raise SetupError("Pilot was installed but its running collector was not verified. Inspect the log before retrying.")
+                self.start_collector(now["cli"], log)
                 self.connect(now)
                 atomic_json(self.cache / "attempt.json", {"stage": "complete", "time": time.time(), "version": VERSION})
                 enabled = ", ".join(now["enabledAgents"])
-                message = (f"Pilot installed for {enabled}. Conversation content is off."
+                message = (f"Pilot installed for {enabled}. Message-content capture is disabled in the collector settings."
                            if enabled else "Pilot installed. No supported agents were detected, so collection is disabled.")
-                return {"ok": True, "message": message, "probe": now}
+                return {"ok": True, "message": message, "probe": self.probe()}
             except Exception:
                 atomic_json(self.cache / "attempt.json", {"stage": "failed", "time": time.time(), "log": str(log)})
                 raise

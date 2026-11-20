@@ -20,7 +20,7 @@ TestCase {
   function test_review_before_apply() {
     var v = createTemporaryObject(factory, suite)
     verify(v !== null)
-    v.plan = {action: "install", version: "1.13.0", token: "reviewed-plan", observed: {state:"missing"}, effects:["Local usage only"]}
+    v.plan = {action: "install", version: "1.19.1", token: "reviewed-plan", observed: {state:"missing"}, effects:["Local usage only"]}
     applied.target = v; applied.clear()
     var b = findChild(v, "setupAction")
     wait(50); mouseClick(b, b.width / 2, b.height / 2); compare(v.reviewed, true); compare(applied.count, 0)
@@ -39,11 +39,11 @@ TestCase {
   function test_missing_and_existing_screenshots() {
     var capture = createTemporaryObject(captureFactory, suite)
     var v = capture.view
-    v.plan = {action:"install",version:"1.13.0",message:"Install the official release with local usage-only defaults.",observed:{state:"missing",service:"not installed",capture:"unknown",outputDir:"~/.loongsuite-pilot/logs/output"},effects:["Download official Pilot", "Content off before first start", "Codex only; local output"]}
+    v.plan = {action:"install",version:"1.19.1",message:"Install the official release with local usage-only defaults.",observed:{state:"missing",service:"not installed",capture:"unknown",outputDir:"~/.loongsuite-pilot/logs/output"},effects:["Download official Pilot", "Content off before first start", "Codex only; local output"]}
     v.reviewed=true; wait(50)
     verify(v.implicitHeight > 350)
     grabImage(capture).save("/tmp/agent-activity-setup-missing.png")
-    v.plan={action:"connect",version:"1.13.0",message:"Reuse existing collector; preserve configuration.",observed:{state:"existing",version:"1.13.0",service:"running",capture:"on or unspecified",remote:"none configured in this file",outputDir:"~/.loongsuite-pilot/logs/output"},effects:["Connect panel to existing output"]}
+    v.plan={action:"connect",version:"1.19.1",message:"Reuse existing collector; preserve configuration.",observed:{state:"existing",version:"1.19.1",service:"running",capture:"on or unspecified",remote:"none configured in this file",outputDir:"~/.loongsuite-pilot/logs/output"},effects:["Connect panel to existing output"]}
     wait(50); grabImage(capture).save("/tmp/agent-activity-setup-existing.png")
   }
 }

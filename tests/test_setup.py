@@ -79,6 +79,20 @@ class SetupTests(unittest.TestCase):
         with self.assertRaises(m.SetupError):
             self.s.apply(plan["token"])
 
+    def test_custom_paths_require_manual_setup(self):
+        for key in ("AGENT_DATA_COLLECTION_CONFIG", "LOONGSUITE_PILOT_DATA_DIR", "LOONGSUITE_PILOT_CACHE_DIR"):
+            with self.subTest(key=key):
+                setup = m.Setup(home=self.home, env={**self.s.env, key: "~/custom"})
+                plan = setup.plan()
+                self.assertEqual(plan["action"], "none")
+                self.assertIn("default Pilot paths", plan["message"])
+
+    def test_existing_custom_data_directory_in_config_is_preserved(self):
+        self.existing(dataDir="/custom/pilot")
+        before = self.s.config.read_bytes()
+        self.assertEqual(self.s.plan()["action"], "none")
+        self.assertEqual(before, self.s.config.read_bytes())
+
     def test_partial_install_is_preserved(self):
         self.s.data.mkdir()
         (self.s.data / "unfinished").write_text("keep")
@@ -99,6 +113,7 @@ class SetupTests(unittest.TestCase):
         self.assertFalse(cfg["collectLog"])
         self.assertFalse(cfg["collectTrace"])
         self.assertFalse(cfg["http"]["enabled"])
+        self.assertIs(cfg["dashboard"]["enabled"], False)
         self.assertFalse(cfg["autoUpdate"]["enabled"])
         self.assertEqual(self.s.config.stat().st_mode & 0o777, 0o600)
         p = self.s.cache_root / "package"
@@ -129,9 +144,26 @@ class SetupTests(unittest.TestCase):
              patch.object(self.s, "runtime_status", return_value="running"):
             result = self.s.apply(plan["token"])
         self.assertTrue(result["ok"])
+        self.assertEqual(result["probe"]["service"], "running")
+        self.assertEqual(result["probe"]["panelHash"], m.fingerprint(self.s.panel_config))
         self.assertEqual(result["probe"]["enabledAgents"], ["claude-code", "codex"])
         self.assertFalse(m.read_object(self.s.panel_config)["allowContent"])
         self.assertEqual(self.s.plan()["action"], "connect")
+
+    def test_rejects_dashboard_reenabled_by_installer(self):
+        def enable_dashboard(*args):
+            self.fake_install(*args)
+            cfg = m.read_object(self.s.config)
+            cfg["dashboard"]["enabled"] = True
+            m.atomic_json(self.s.config, cfg)
+
+        plan = self.s.plan()
+        with patch.object(self.s, "download", return_value=self.fixture_package()), \
+             patch.object(self.s, "run_installer", side_effect=enable_dashboard), \
+             patch.object(self.s, "start_collector", side_effect=AssertionError("must stay stopped")):
+            with self.assertRaisesRegex(m.SetupError, "Dashboard privacy"):
+                self.s.apply(plan["token"])
+        self.assertFalse(self.s.panel_config.exists())
 
     def test_download_failure_does_not_create_pilot_config(self):
         plan = self.s.plan()
