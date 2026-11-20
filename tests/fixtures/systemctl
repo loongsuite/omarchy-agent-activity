@@ -15,6 +15,7 @@ if ("enable" in args or "start" in args) and "loongsuite-pilot.service" in args:
     assert all(v.get("captureMessageContent") is False for v in cfg["agents"].values())
     assert cfg["collectLog"] is False and cfg["collectTrace"] is False
     assert cfg["http"]["enabled"] is False
+    assert cfg["dashboard"]["enabled"] is False
     assert cfg["autoUpdate"]["enabled"] is False
     assert {k for k, v in cfg["agents"].items() if v.get("enabled") is True} == {"claude-code", "codex"}
     (home / "privacy-before-start.ok").write_text("Passed before real collector process launch\n")

@@ -23,7 +23,7 @@ by the source. Press **Backspace** or **Esc** to return to the session list.
 ## Install
 
 Requires the Omarchy Quattro desktop, Python 3, Git, `curl`, `tar`, and a running
-systemd user session. The panel reads LoongSuite Pilot 1.13.0 records for
+systemd user session. The panel reads LoongSuite Pilot 1.19.1 records for
 supported agents such as Claude Code and Codex.
 
 Open a terminal in Omarchy and run:
@@ -53,9 +53,11 @@ if you also want to uninstall Pilot.
 
 ## Your data
 
-The panel reads local records. New installations disable message-content
-capture and remote export by default; existing Pilot settings are preserved.
-Conversation details require content collection and display to be enabled.
+The panel reads local records. Fresh setup uses the default Pilot paths and disables the local Dashboard,
+message-content capture, and remote export before the collector starts.
+Connecting an existing installation preserves its settings.
+The Cursor hook can store prompts and tool arguments locally while it assembles a turn.
+Conversation details in the panel require content collection and display to be enabled.
 These settings do not delete transcripts already stored by your coding agent.
 
 Usage reflects available local records, not your account quota or billing total.

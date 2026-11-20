@@ -56,7 +56,7 @@ Column {
   }
   Text {
     width: parent.width
-    text: root.plan.action === "install" ? "New installation · Pilot " + root.plan.version + "\nSupported agents are detected during installation. Conversation content stays off and output stays local.\nDownloads require internet."
+    text: root.plan.action === "install" ? "New installation · Pilot " + root.plan.version + "\nSupported agents are detected during installation. Dashboard and message-content capture are disabled. Output stays local.\nDownloads require internet."
       : "This panel does not change your collector’s capture or export settings. Hidden content in the panel does not mean content was not collected."
     color: root.secondary; font.family: root.family; font.pixelSize: 12 * root.unit; wrapMode: Text.Wrap
   }
@@ -98,7 +98,7 @@ Column {
   }
   Text {
     width: parent.width
-    text: "Supports Pilot 1.13.0. Upgrades and repairs remain manual. Existing configuration is preserved."
+    text: "Supports Pilot 1.19.1. Upgrades and repairs remain manual. Existing configuration is preserved."
     color: root.secondary; font.family: root.family; font.pixelSize: 11 * root.unit; wrapMode: Text.Wrap
   }
 }
